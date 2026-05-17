@@ -14,9 +14,8 @@ services:
       - AWS_SECRET_KEY=${AWS_SECRET_KEY}
       - AWS_REGION=${AWS_REGION}
       - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
-      - RABBITMQ_URL=${RABBITMQ_URL}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
+      - RABBITMQ_URL=${RABBITMQ_URL:-amqp://rabbitmq}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
     volumes:
       - .:/app
       - /app/node_modules
