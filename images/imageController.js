@@ -54,8 +54,9 @@ const getImageController = async (req, res) => {
       return res.status(400).json({ message: "Id is required" })
     }
 
-    const image = await getImage(id)
-    res.status(200).json({ image, message: "Image retrieved successfully" })
+    const imageData = await getImage(id)
+    res.set("Content-Type", imageData.contentType || "application/octet-stream")
+    res.status(200).send(imageData.buffer)
   } catch (error) {
     res
       .status(500)

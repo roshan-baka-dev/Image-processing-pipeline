@@ -5,12 +5,35 @@ const {
   getFromS3,
   deleteFromS3,
 } = require('../utils/s3Upload');
-const Image = require('../models/Image');
+const Image = require('../models/image');
 const redisClient = require('../configs/redis');
+
+const streamToBuffer = async (body) => {
+  if (!body) {
+    return null;
+  }
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    body.on('data', (chunk) => chunks.push(chunk));
+    body.on('end', () => resolve(Buffer.concat(chunks)));
+    body.on('error', (error) => reject(error));
+  });
+};
 
 // Upload image to S3 bucket
 const uploadImage = async (file, userId) => {
   const imageUrl = await uploadToS3(file);
+  if (!imageUrl) {
+    throw new Error('Failed to upload image to S3');
+  }
+
   const image = new Image({ url: imageUrl.url, userId });
   await image.save();
   return imageUrl;
@@ -26,9 +49,24 @@ const transformImage = async (id, transformations) => {
 
   // Get the image from MongoDB and fetch its bytes from S3
   const image = await Image.findById(id);
+  if (!image) {
+    throw new Error('Image not found');
+  }
+
   const s3Key = image.url.split('.amazonaws.com/')[1];
+  if (!s3Key) {
+    throw new Error('Invalid S3 image URL');
+  }
+
   const s3Response = await getFromS3(s3Key);
-  const imageBuffer = Buffer.concat(await s3Response.data.Body.toArray());
+  if (!s3Response?.data?.Body) {
+    throw new Error('Failed to fetch image from S3');
+  }
+
+  const imageBuffer = await streamToBuffer(s3Response.data.Body);
+  if (!imageBuffer) {
+    throw new Error('Failed to read image from S3');
+  }
 
   const transformedImageBuffer = await sharp(imageBuffer)
     .resize(transformations.resize)
@@ -47,8 +85,20 @@ const transformImage = async (id, transformations) => {
 
 // Get image from S3 bucket
 const getImage = async (id) => {
-  const image = await getFromS3(id);
-  return image;
+  const s3Response = await getFromS3(id);
+  if (!s3Response?.data?.Body) {
+    throw new Error('Failed to fetch image from S3');
+  }
+
+  const imageBuffer = await streamToBuffer(s3Response.data.Body);
+  if (!imageBuffer) {
+    throw new Error('Failed to read image from S3');
+  }
+
+  return {
+    buffer: imageBuffer,
+    contentType: s3Response.data.ContentType,
+  };
 };
 
 // Delete image from S3 bucket
@@ -59,9 +109,11 @@ const deleteImage = async (id) => {
 
 // List all images
 const listImages = async (userId, page, limit) => {
+  const safePage = Math.max(parseInt(page, 10) || 1, 1);
+  const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
   const images = await Image.find({ userId })
-    .skip((page - 1) * limit)
-    .limit(parseInt(limit));
+    .skip((safePage - 1) * safeLimit)
+    .limit(safeLimit);
   return images;
 };
 

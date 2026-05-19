@@ -28,6 +28,10 @@ const connectToRabbitMQ = () => {
 
         // Consume messages from the queue
         channel.consume(queue, async (message) => {
+          if (!message) {
+            console.warn('RabbitMQ consumer canceled by server');
+            return;
+          }
           try {
             const { id, transformations } = JSON.parse(
               message.content.toString(),
