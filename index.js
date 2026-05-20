@@ -2,6 +2,7 @@ const dotenv = require('dotenv');
 dotenv.config({ override: true });
 
 const express = require('express');
+const cors = require('cors');
 const mongoose = require('mongoose');
 const redisClient = require('./configs/redis');
 const connectToRabbitMQ = require('./configs/rabbitMQ');
@@ -11,6 +12,7 @@ const imageRoutes = require('./images/imageRoutes');
 const PORT = process.env.PORT || 5000;
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 
 app.use('/auth', authRoutes);
