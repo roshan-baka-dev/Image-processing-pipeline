@@ -1,27 +1,32 @@
-const express = require("express")
-const authMiddleware = require("../auth/authMiddleware")
-const multer = require("multer")
+const express = require('express');
+const authMiddleware = require('../auth/authMiddleware');
+const multer = require('multer');
 const {
   uploadImageController,
   transformImageController,
   getImageController,
   deleteImageController,
   listImagesController,
-} = require("./imageController")
+} = require('./imageController');
 
-const router = express.Router()
-const upload = multer({ dest: "uploads/" })
+const router = express.Router();
+const upload = multer({ dest: 'uploads/' });
 
 // Routes for images
-router.get("/", authMiddleware, listImagesController)
-router.get("/:id", getImageController)
+router.get('/', authMiddleware, listImagesController);
+router.get('/:id', getImageController);
 router.post(
-  "/upload",
+  '/upload',
   authMiddleware,
-  upload.single("image"),
-  uploadImageController
-)
-router.post("/transform/:id", authMiddleware, transformImageController)
-router.delete("/:id", authMiddleware, deleteImageController)
+  upload.single('image'),
+  uploadImageController,
+);
+router.post('/transform/:id', authMiddleware, transformImageController);
+router.get(
+  '/download/:id',
+  authMiddleware,
+  require('./imageController').downloadImageController,
+);
+router.delete('/:id', authMiddleware, deleteImageController);
 
-module.exports = router
+module.exports = router;
