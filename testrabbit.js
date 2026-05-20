@@ -1,16 +1,17 @@
-const amqp = require('amqplib/callback_api');
+const amqp = require('amqplib');
+
 const url =
   'amqps://rbkvxtjk:jV3oMgZsRZgQ6vrXz5gTq2Hgrdazu1zX@puffin.rmq2.cloudamqp.com/rbkvxtjk';
 
-console.log('Sending a single connection request to RabbitMQ...');
-
-amqp.connect(url, function (err, conn) {
-  if (err) {
-    console.error('❌ Connection Failed:', err.message);
-    process.exit(1);
-  } else {
-    console.log('🚀 SUCCESS! Connected to RabbitMQ perfectly.');
-    conn.close();
-    process.exit(0);
+async function test() {
+  try {
+    const conn = await amqp.connect(url);
+    console.log('✅ Connected successfully!');
+    await conn.close();
+  } catch (err) {
+    console.error('❌ Connection failed:');
+    console.error(err);
   }
-});
+}
+
+test();

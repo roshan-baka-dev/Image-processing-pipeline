@@ -1,18 +1,23 @@
-const dotenv = require('dotenv');
-dotenv.config({ override: true });
-
 const express = require('express');
-const cors = require('cors');
 const mongoose = require('mongoose');
+const dotenv = require('dotenv');
 const redisClient = require('./configs/redis');
 const connectToRabbitMQ = require('./configs/rabbitMQ');
 const authRoutes = require('./auth/authRoutes');
 const imageRoutes = require('./images/imageRoutes');
+const cors = require('cors');
+dotenv.config();
 
 const PORT = process.env.PORT || 5000;
 const app = express();
 
-app.use(cors());
+// Middlewares
+app.use(
+  cors({
+    origin: 'http://localhost:5174', // Allows your Vite frontend
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 app.use('/auth', authRoutes);
