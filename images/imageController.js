@@ -7,7 +7,33 @@ const {
 } = require('./imageService');
 const Image = require('../models/image');
 const { getFromS3 } = require('../utils/s3Upload');
-const redisClient = require('../configs/redis');
+const { redisClient, isRedisReady } = require('../configs/redis');
+
+const getFileExtensionFromContentType = (contentType) => {
+  const normalizedContentType = (contentType || '').toLowerCase();
+
+  switch (normalizedContentType) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return 'jpg';
+    case 'image/png':
+      return 'png';
+    case 'image/gif':
+      return 'gif';
+    case 'image/webp':
+      return 'webp';
+    case 'image/bmp':
+      return 'bmp';
+    case 'image/svg+xml':
+      return 'svg';
+    case 'image/tiff':
+      return 'tiff';
+    case 'image/avif':
+      return 'avif';
+    default:
+      return 'bin';
+  }
+};
 
 const uploadImageController = async (req, res) => {
   try {
@@ -126,15 +152,20 @@ module.exports = {
         return res.status(404).json({ message: 'Image not found' });
       }
 
-      // Check Redis for transformed URL cached under image id
-      let cached = await redisClient.get(id);
       let url = imageDoc.url;
-      if (cached) {
+      if (isRedisReady()) {
         try {
-          const parsed = JSON.parse(cached);
-          url = parsed.url || parsed;
-        } catch (e) {
-          url = cached;
+          const cached = await redisClient.get(id);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              url = parsed.url || parsed;
+            } catch (e) {
+              url = cached;
+            }
+          }
+        } catch (err) {
+          console.error('Redis GET failed in download, using original URL:', err.message);
         }
       }
 
@@ -152,7 +183,8 @@ module.exports = {
 
       const contentType =
         s3Response.data.ContentType || 'application/octet-stream';
-      const filename = s3Key.split('/').pop() || `file-${id}`;
+      const fileExtension = getFileExtensionFromContentType(contentType);
+      const filename = `transformed-${id}.${fileExtension}`;
 
       res.setHeader('Content-Type', contentType);
       res.setHeader(

@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const redisClient = require('./configs/redis');
+const { redisClient } = require('./configs/redis');
 const connectToRabbitMQ = require('./configs/rabbitMQ');
 const authRoutes = require('./auth/authRoutes');
 const imageRoutes = require('./images/imageRoutes');
@@ -14,7 +14,7 @@ const app = express();
 // Middlewares
 app.use(
   cors({
-    origin: 'http://localhost:5174', // Allows your Vite frontend
+    origin: 'http://localhost:5173', // Allows your Vite frontend
     credentials: true,
   }),
 );
@@ -29,11 +29,7 @@ mongoose
     useUnifiedTopology: true,
   })
   .then(() => {
-    console.log('Connected to MongoDB Successfully 🚀');
-
-    redisClient.on('connect', () => {
-      console.log('Connected to Redis Successfully 🚀');
-    });
+    console.log('Connected to MongoDB Successfully');
 
     connectToRabbitMQ();
 
@@ -44,3 +40,16 @@ mongoose
   .catch((err) => {
     console.log('Failed to connect to MongoDB', err);
   });
+
+const shutdown = async (signal) => {
+  console.log(`${signal} received, shutting down...`);
+  try {
+    await redisClient.quit();
+  } catch (err) {
+    console.error('Error closing Redis:', err.message);
+  }
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

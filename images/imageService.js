@@ -6,7 +6,7 @@ const {
   deleteFromS3,
 } = require('../utils/s3Upload');
 const Image = require('../models/image');
-const redisClient = require('../configs/redis');
+const { redisClient, isRedisReady } = require('../configs/redis');
 
 const streamToBuffer = async (body) => {
   if (!body) {
@@ -41,10 +41,15 @@ const uploadImage = async (file, userId) => {
 
 // Transform image and cache it
 const transformImage = async (id, transformations) => {
-  // Get the cached image from Redis if it exists
-  const cachedImage = await redisClient.get(id);
-  if (cachedImage) {
-    return JSON.parse(cachedImage);
+  if (isRedisReady()) {
+    try {
+      const cachedImage = await redisClient.get(id);
+      if (cachedImage) {
+        return JSON.parse(cachedImage);
+      }
+    } catch (err) {
+      console.error('Redis GET failed, skipping cache:', err.message);
+    }
   }
 
   // Get the image from MongoDB and fetch its bytes from S3
@@ -78,7 +83,13 @@ const transformImage = async (id, transformations) => {
     transformedImageBuffer,
     transformedKey,
   );
-  await redisClient.set(id, JSON.stringify(transformedImageUrl), { EX: 3600 });
+  if (isRedisReady()) {
+    try {
+      await redisClient.set(id, JSON.stringify(transformedImageUrl), { EX: 3600 });
+    } catch (err) {
+      console.error('Redis SET failed, skipping cache write:', err.message);
+    }
+  }
 
   return transformedImageUrl;
 };

@@ -24,7 +24,6 @@ router.post(
 router.post('/transform/:id', authMiddleware, transformImageController);
 router.get(
   '/download/:id',
-  authMiddleware,
   require('./imageController').downloadImageController,
 );
 router.delete('/:id', authMiddleware, deleteImageController);
