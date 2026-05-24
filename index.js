@@ -12,9 +12,18 @@ const PORT = process.env.PORT || 5000;
 const app = express();
 
 // Middlewares
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://image-processing-frontend-xi.vercel.app',
+];
+
 app.use(
   cors({
-    origin: 'http://localhost:5173', // Allows your Vite frontend
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('CORS not allowed'));
+    },
     credentials: true,
   }),
 );
