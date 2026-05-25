@@ -1,9 +1,10 @@
-const mongoose = require("mongoose")
+const mongoose = require('mongoose');
 
 const imageSchema = new mongoose.Schema({
   url: { type: String, required: true },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   metadata: { type: Object },
-})
+  s3Key: { type: String, required: true },
+});
 
-module.exports = mongoose.model("Image", imageSchema)
+module.exports = mongoose.model('Image', imageSchema);

@@ -9,13 +9,10 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-// Initialize S3 client
+// Initialize S3 client. Do not pass explicit credentials so the SDK
+// can use the default provider chain (EC2 instance role, environment, etc.).
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY,
-    secretAccessKey: process.env.AWS_SECRET_KEY,
-  },
 });
 
 // Upload file to S3 bucket

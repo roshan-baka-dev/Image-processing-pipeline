@@ -47,6 +47,13 @@ const uploadImageController = async (req, res) => {
     const imageUrl = await uploadImage(file, userId);
     res.status(201).json({ imageUrl, message: 'Image uploaded successfully' });
   } catch (error) {
+    if (error && error.isBlocked) {
+      return res.status(403).json({ isBlocked: true, message: error.message });
+    }
+    // Multer file size limit errors come with code 'LIMIT_FILE_SIZE'
+    if (error && error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ message: 'File too large' });
+    }
     res
       .status(500)
       .json({ message: 'Error uploading image', error: error.message });
@@ -165,7 +172,10 @@ module.exports = {
             }
           }
         } catch (err) {
-          console.error('Redis GET failed in download, using original URL:', err.message);
+          console.error(
+            'Redis GET failed in download, using original URL:',
+            err.message,
+          );
         }
       }
 

@@ -1,5 +1,6 @@
 const sharp = require('sharp');
 const crypto = require('crypto');
+const { isImageSafeFromS3 } = require('../utils/rekognition');
 const {
   uploadToS3,
   uploadBufferToS3,
@@ -30,14 +31,30 @@ const streamToBuffer = async (body) => {
 
 // Upload image to S3 bucket
 const uploadImage = async (file, userId) => {
-  const imageUrl = await uploadToS3(file);
-  if (!imageUrl) {
-    throw new Error('Failed to upload image to S3');
+  // upload original to S3 first
+  const uploadRes = await uploadToS3(file);
+  if (!uploadRes) throw new Error('Failed to upload image to S3');
+
+  const s3Key = file.filename; // uploadToS3 uses file.filename as Key
+  const bucket = process.env.AWS_BUCKET_NAME;
+
+  // run Rekognition on the S3 object
+  const { safe, blocked, labels } = await isImageSafeFromS3(bucket, s3Key);
+  if (!safe) {
+    // delete object from S3, leave no trace
+    await deleteFromS3(s3Key).catch(() => {});
+    const reasons = blocked
+      .map((b) => `${b.Name} (${Math.round(b.Confidence)}%)`)
+      .join(', ');
+    const err = new Error(`Image blocked by content policy: ${reasons}`);
+    err.isBlocked = true;
+    throw err;
   }
 
-  const image = new Image({ url: imageUrl.url, userId });
+  // Persist record with s3Key
+  const image = new Image({ url: uploadRes.url, s3Key, userId });
   await image.save();
-  return imageUrl;
+  return { url: uploadRes.url, s3Key };
 };
 
 // Transform image and cache it
@@ -70,9 +87,10 @@ const transformImage = async (id, transformations) => {
     throw new Error('Image not found');
   }
 
-  const s3Key = image.url.split('.amazonaws.com/')[1];
+  // prefer explicit s3Key stored in DB, fall back to URL parsing
+  const s3Key = image.s3Key || image.url.split('.amazonaws.com/')[1];
   if (!s3Key) {
-    throw new Error('Invalid S3 image URL');
+    throw new Error('Invalid S3 image URL or missing s3Key');
   }
 
   const s3Response = await getFromS3(s3Key);
@@ -121,7 +139,20 @@ const transformImage = async (id, transformations) => {
 
 // Get image from S3 bucket
 const getImage = async (id) => {
-  const s3Response = await getFromS3(id);
+  // id may be either an Image document id or an S3 key. Prefer resolving
+  // an Image document to obtain the stored s3Key, otherwise treat the
+  // input as a direct S3 key.
+  let s3Key = id;
+  try {
+    const imageDoc = await Image.findById(id);
+    if (imageDoc) {
+      s3Key = imageDoc.s3Key || imageDoc.url.split('.amazonaws.com/')[1];
+    }
+  } catch (e) {
+    // not a mongo id or lookup failed; fall back to treating id as key
+  }
+
+  const s3Response = await getFromS3(s3Key);
   if (!s3Response?.data?.Body) {
     throw new Error('Failed to fetch image from S3');
   }
