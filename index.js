@@ -11,6 +11,20 @@ dotenv.config();
 const PORT = process.env.PORT || 5000;
 const app = express();
 
+// If running behind a proxy (Nginx/ELB), trust first proxy to get correct IP
+app.set('trust proxy', 1);
+
+const rateLimit = require('express-rate-limit');
+
+// Global rate limiter: 100 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+app.use(globalLimiter);
+
 // Middlewares
 const allowedOrigins = [
   'http://localhost:5173',
