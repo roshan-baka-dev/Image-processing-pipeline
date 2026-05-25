@@ -41,6 +41,16 @@ const uploadToS3 = async (file) => {
   } catch (error) {
     console.error('Error uploading file', error);
     return null;
+  } finally {
+    if (file && file.path) {
+      fs.unlink(file.path, (err) => {
+        if (err) {
+          console.error('Failed to remove temp upload:', err);
+        } else {
+          console.log('Temp upload removed:', file.path);
+        }
+      });
+    }
   }
 };
 
