@@ -73,10 +73,21 @@ const transformImage = async (id, transformations) => {
     throw new Error('Failed to read image from S3');
   }
 
-  const transformedImageBuffer = await sharp(imageBuffer)
-    .resize(transformations.resize)
-    .rotate(transformations.rotate)
-    .toBuffer();
+  let imagePipeline = sharp(imageBuffer);
+
+  if (transformations.resize) {
+    imagePipeline = imagePipeline.resize(transformations.resize);
+  }
+
+  if (transformations.rotate) {
+    imagePipeline = imagePipeline.rotate(transformations.rotate);
+  }
+
+  if (transformations.blackAndWhite) {
+    imagePipeline = imagePipeline.grayscale().threshold(128);
+  }
+
+  const transformedImageBuffer = await imagePipeline.toBuffer();
 
   const transformedKey = `transformed-${Date.now()}-${s3Key}`;
   const transformedImageUrl = await uploadBufferToS3(
@@ -85,7 +96,9 @@ const transformImage = async (id, transformations) => {
   );
   if (isRedisReady()) {
     try {
-      await redisClient.set(id, JSON.stringify(transformedImageUrl), { EX: 3600 });
+      await redisClient.set(id, JSON.stringify(transformedImageUrl), {
+        EX: 3600,
+      });
     } catch (err) {
       console.error('Redis SET failed, skipping cache write:', err.message);
     }
