@@ -1,4 +1,5 @@
 const sharp = require('sharp');
+const crypto = require('crypto');
 const {
   uploadToS3,
   uploadBufferToS3,
@@ -41,9 +42,20 @@ const uploadImage = async (file, userId) => {
 
 // Transform image and cache it
 const transformImage = async (id, transformations) => {
+  transformations = transformations || {};
+
+  // create a short hash of the transformation params so different
+  // transforms don't collide in Redis cache
+  const transformHash = crypto
+    .createHash('md5')
+    .update(JSON.stringify(transformations))
+    .digest('hex');
+
+  const cacheKey = `transform:${id}:${transformHash}`;
+
   if (isRedisReady()) {
     try {
-      const cachedImage = await redisClient.get(id);
+      const cachedImage = await redisClient.get(cacheKey);
       if (cachedImage) {
         return JSON.parse(cachedImage);
       }
@@ -96,7 +108,7 @@ const transformImage = async (id, transformations) => {
   );
   if (isRedisReady()) {
     try {
-      await redisClient.set(id, JSON.stringify(transformedImageUrl), {
+      await redisClient.set(cacheKey, JSON.stringify(transformedImageUrl), {
         EX: 3600,
       });
     } catch (err) {
