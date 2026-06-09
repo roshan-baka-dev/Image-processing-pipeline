@@ -33,7 +33,17 @@ const streamToBuffer = async (body) => {
 
 // Upload image to S3 bucket
 const uploadImage = async (file, userId) => {
-  const uploadRes = await uploadToS3(file);
+  // ✅ Read buffer FIRST — uploadToS3 deletes the temp file in its finally block,
+  // so we must capture the bytes before calling it or we'll get ENOENT.
+  const fs = require('fs');
+  let imageBuffer = null;
+  try {
+    imageBuffer = fs.readFileSync(file.path);
+  } catch (e) {
+    console.error('Could not read temp file for AI enrichment:', e.message);
+  }
+
+  const uploadRes = await uploadToS3(file); // deletes file.path internally
   if (!uploadRes) throw new Error('Failed to upload image to S3');
   const s3Key = file.filename;
   const bucket = process.env.AWS_BUCKET_NAME;
@@ -49,15 +59,8 @@ const uploadImage = async (file, userId) => {
   const rekognitionTags = labels.map((l) => l.Name);
   const image = new Image({ url: uploadRes.url, s3Key, userId, tags: rekognitionTags });
   await image.save();
+
   // ✨ Fire-and-forget AI enrichment (non-blocking)
-  // Read buffer from disk since Multer uses disk storage (file.path), not memoryStorage
-  const fs = require('fs');
-  let imageBuffer = null;
-  try {
-    imageBuffer = fs.readFileSync(file.path);
-  } catch (e) {
-    console.error('Could not read temp file for AI enrichment:', e.message);
-  }
   if (imageBuffer) {
     enrichImageWithAI(image._id, imageBuffer, rekognitionTags, file.mimetype).catch((err) =>
       console.error('AI enrichment failed:', err.message)
@@ -65,6 +68,7 @@ const uploadImage = async (file, userId) => {
   }
   return { url: uploadRes.url, s3Key };
 };
+
 
 // Transform image and cache it
 const transformImage = async (id, transformations) => {

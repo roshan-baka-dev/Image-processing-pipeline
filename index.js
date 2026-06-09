@@ -47,10 +47,7 @@ app.use('/auth', authRoutes);
 app.use('/images', imageRoutes);
 
 mongoose
-  .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB Successfully');
 
