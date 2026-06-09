@@ -10,6 +10,8 @@ const {
 const Image = require('../models/image');
 const { redisClient, isRedisReady } = require('../configs/redis');
 
+const { generateCaption, generateEmbedding } = require('../utils/aiService');
+
 const streamToBuffer = async (body) => {
   if (!body) {
     return null;
@@ -31,29 +33,36 @@ const streamToBuffer = async (body) => {
 
 // Upload image to S3 bucket
 const uploadImage = async (file, userId) => {
-  // upload original to S3 first
   const uploadRes = await uploadToS3(file);
   if (!uploadRes) throw new Error('Failed to upload image to S3');
-
-  const s3Key = file.filename; // uploadToS3 uses file.filename as Key
+  const s3Key = file.filename;
   const bucket = process.env.AWS_BUCKET_NAME;
-
-  // run Rekognition on the S3 object
   const { safe, blocked, labels } = await isImageSafeFromS3(bucket, s3Key);
   if (!safe) {
-    // delete object from S3, leave no trace
-    await deleteFromS3(s3Key).catch(() => {});
-    const reasons = blocked
-      .map((b) => `${b.Name} (${Math.round(b.Confidence)}%)`)
-      .join(', ');
+    await deleteFromS3(s3Key).catch(() => { });
+    const reasons = blocked.map((b) => `${b.Name} (${Math.round(b.Confidence)}%)`).join(', ');
     const err = new Error(`Image blocked by content policy: ${reasons}`);
     err.isBlocked = true;
     throw err;
   }
-
-  // Persist record with s3Key
-  const image = new Image({ url: uploadRes.url, s3Key, userId });
+  // Extract Rekognition tag names (already available!)
+  const rekognitionTags = labels.map((l) => l.Name);
+  const image = new Image({ url: uploadRes.url, s3Key, userId, tags: rekognitionTags });
   await image.save();
+  // ✨ Fire-and-forget AI enrichment (non-blocking)
+  // Read buffer from disk since Multer uses disk storage (file.path), not memoryStorage
+  const fs = require('fs');
+  let imageBuffer = null;
+  try {
+    imageBuffer = fs.readFileSync(file.path);
+  } catch (e) {
+    console.error('Could not read temp file for AI enrichment:', e.message);
+  }
+  if (imageBuffer) {
+    enrichImageWithAI(image._id, imageBuffer, rekognitionTags, file.mimetype).catch((err) =>
+      console.error('AI enrichment failed:', err.message)
+    );
+  }
   return { url: uploadRes.url, s3Key };
 };
 
@@ -184,10 +193,58 @@ const listImages = async (userId, page, limit) => {
   return images;
 };
 
+// NEW: background AI enrichment
+async function enrichImageWithAI(imageId, imageBuffer, existingTags, mimeType = 'image/jpeg') {
+  const caption = await generateCaption(imageBuffer, mimeType);
+  const textToEmbed = `${caption} ${existingTags.join(' ')}`;
+  const embedding = await generateEmbedding(textToEmbed);
+  await Image.findByIdAndUpdate(imageId, {
+    caption,
+    embedding,
+    aiProcessed: true,
+  });
+  console.log(`✅ AI enrichment done for image ${imageId}`);
+}
+
+// Semantic search using MongoDB Atlas $vectorSearch
+const searchImages = async (userId, queryText, topK = 10) => {
+  // generateEmbedding is already imported at the top of this file
+
+  // 1. Embed the user's query
+  const queryEmbedding = await generateEmbedding(queryText);
+
+  // 2. Run Atlas Vector Search
+  const results = await Image.aggregate([
+    {
+      $vectorSearch: {
+        index: 'vector_index',
+        path: 'embedding',
+        queryVector: queryEmbedding,
+        numCandidates: 100,        // search pool size
+        limit: topK,
+        filter: { userId: userId } // only search user's own images
+      },
+    },
+    {
+      $project: {
+        url: 1,
+        caption: 1,
+        tags: 1,
+        s3Key: 1,
+        score: { $meta: 'vectorSearchScore' }, // relevance score
+      },
+    },
+  ]);
+
+  return results;
+};
+
+
 module.exports = {
   uploadImage,
   transformImage,
   getImage,
   deleteImage,
   listImages,
+  searchImages,
 };

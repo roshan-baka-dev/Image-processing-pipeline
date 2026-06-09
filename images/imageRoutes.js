@@ -8,6 +8,7 @@ const {
   getImageController,
   deleteImageController,
   listImagesController,
+  searchImagesController
 } = require('./imageController');
 
 const router = express.Router();
@@ -31,7 +32,9 @@ const uploadLimiter = rateLimit({
 
 // Routes for images
 router.get('/', authMiddleware, listImagesController);
-router.get('/:id', getImageController);
+
+// ⚠️ Specific routes MUST come before wildcard /:id routes
+router.post('/search', authMiddleware, searchImagesController);
 router.post(
   '/upload',
   authMiddleware,
@@ -44,6 +47,7 @@ router.get(
   '/download/:id',
   require('./imageController').downloadImageController,
 );
+router.get('/:id', getImageController);
 router.delete('/:id', authMiddleware, deleteImageController);
 
 module.exports = router;

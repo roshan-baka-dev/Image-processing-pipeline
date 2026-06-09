@@ -4,6 +4,7 @@ const {
   getImage,
   deleteImage,
   listImages,
+  searchImages,
 } = require('./imageService');
 const Image = require('../models/image');
 const { getFromS3 } = require('../utils/s3Upload');
@@ -138,12 +139,28 @@ const listImagesController = async (req, res) => {
   }
 };
 
+// POST /images/search
+const searchImagesController = async (req, res) => {
+  try {
+    const { query } = req.body;
+    const userId = req.userId;
+    if (!query) {
+      return res.status(400).json({ message: 'Search query is required' });
+    }
+    const results = await searchImages(userId, query);
+    res.status(200).json({ results, message: 'Search completed' });
+  } catch (error) {
+    res.status(500).json({ message: 'Search failed', error: error.message });
+  }
+};
+
 module.exports = {
   uploadImageController,
   transformImageController,
   getImageController,
   deleteImageController,
   listImagesController,
+  searchImagesController,
   // new download controller
   downloadImageController: async (req, res) => {
     try {
