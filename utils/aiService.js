@@ -5,7 +5,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Job 1: Vision — describe what's in the image
 async function generateCaption(imageBuffer, mimeType = 'image/jpeg') {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const imagePart = {
         inlineData: {
