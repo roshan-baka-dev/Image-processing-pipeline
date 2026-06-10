@@ -36,30 +36,39 @@ async function withRetry(fn, maxAttempts = 3) {
     }
 }
 
-// ─── Job 1: Image Captioning ──────────────────────────────────────────────────
-// Primary:  nlpconnect/vit-gpt2-image-captioning (Highly available on free tier)
-// Fallback: build a descriptive caption from Rekognition labels
+// ─── Job 1: Image Captioning — Waterfall Strategy ────────────────────────────
+// Tries 3 free HF vision models in order. If a model has no inference provider
+// (common on the free tier), it immediately skips to the next one.
+// Only falls back to Rekognition labels if ALL models fail.
 async function generateCaption(imageBuffer, mimeType = 'image/jpeg', fallbackLabels = []) {
-    try {
-        const blob = new Blob([imageBuffer], { type: mimeType });
+    const blob = new Blob([imageBuffer], { type: mimeType });
 
-        const result = await withRetry(() =>
-            hf.imageToText({
-                model: 'nlpconnect/vit-gpt2-image-captioning',
-                data: blob,
-                provider: 'hf-inference'
-            })
-        );
+    const visionModels = [
+        'Salesforce/blip-image-captioning-large',
+        'nlpconnect/vit-gpt2-image-captioning',
+        'microsoft/git-base-coco',
+    ];
 
-        if (result?.generated_text) {
-            console.log('✅ HF caption generated:', result.generated_text);
-            return result.generated_text;
+    for (const model of visionModels) {
+        try {
+            const result = await withRetry(() =>
+                hf.imageToText({
+                    model,
+                    data: blob,
+                    // Let HF auto-route globally — no provider lock-in
+                })
+            );
+
+            if (result?.generated_text) {
+                console.log(`✅ HF caption generated via [${model}]: "${result.generated_text}"`);
+                return result.generated_text;
+            }
+        } catch (err) {
+            console.warn(`[${model}] unavailable, trying next... (${err.message?.slice(0, 80)})`);
         }
-    } catch (err) {
-        console.warn('HF image captioning failed, using label fallback:', err.message?.slice(0, 120));
     }
 
-    // Fallback: build caption from Rekognition labels (always available)
+    console.warn('All HF vision models failed — using Rekognition label fallback.');
     return buildCaptionFromLabels(fallbackLabels);
 }
 
@@ -78,7 +87,6 @@ async function generateEmbedding(text) {
         hf.featureExtraction({
             model: 'sentence-transformers/all-mpnet-base-v2',
             inputs: text,
-            provider: 'hf-inference'
         })
     );
 
