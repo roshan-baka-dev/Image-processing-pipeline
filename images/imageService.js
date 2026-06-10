@@ -221,30 +221,42 @@ async function enrichImageWithAI(imageId, imageBuffer, existingTags, mimeType = 
 
 // Semantic search using MongoDB Atlas $vectorSearch
 const searchImages = async (userId, queryText, topK = 10) => {
-  // generateEmbedding is already imported at the top of this file
+  const mongoose = require('mongoose');
 
-  // 1. Embed the user's query
+  // 1. Embed the user's query text into a 768-dim vector
   const queryEmbedding = await generateEmbedding(queryText);
 
-  // 2. Run Atlas Vector Search
+  // 2. Run Atlas Vector Search + post-filter by userId
+  //    NOTE: $vectorSearch 'filter' requires the field to be declared as a
+  //    filter type in the Atlas index definition. Instead we use a $match
+  //    stage after the vector search — simpler and no index config needed.
   const results = await Image.aggregate([
     {
       $vectorSearch: {
-        index: 'vector_index',
+        index: 'vector_index',   // must match the name in Atlas UI exactly
         path: 'embedding',
         queryVector: queryEmbedding,
-        numCandidates: 100,        // search pool size
-        limit: topK,
-        filter: { userId: userId } // only search user's own images
+        numCandidates: 150,
+        limit: 50,               // fetch more than needed so $match has candidates
       },
     },
+    {
+      // Filter to only the current user's images.
+      // Cast userId string → ObjectId so it matches the stored type.
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
+        aiProcessed: true,       // skip images not yet enriched
+      },
+    },
+    { $limit: topK },
     {
       $project: {
         url: 1,
         caption: 1,
         tags: 1,
         s3Key: 1,
-        score: { $meta: 'vectorSearchScore' }, // relevance score
+        embedding: 0,            // don't send the 768-float array to client
+        score: { $meta: 'vectorSearchScore' },
       },
     },
   ]);
