@@ -55,9 +55,16 @@ const uploadImage = async (file, userId) => {
     err.isBlocked = true;
     throw err;
   }
-  // ✅ Moderation labels are empty for safe images — call DetectLabels separately
-  // to get actual object/scene labels (Dog, Outdoor, Park, etc.) for captioning.
-  const generalTags = await detectGeneralLabelsS3(bucket, s3Key);
+  // Get general object/scene labels for caption + search tags.
+  // Wrapped in try-catch — if DetectLabels fails (e.g. IAM permission not set),
+  // the upload still succeeds; AI enrichment will just get an empty tag list.
+  let generalTags = [];
+  try {
+    generalTags = await detectGeneralLabelsS3(bucket, s3Key);
+  } catch (e) {
+    console.error('DetectLabels failed (check IAM rekognition:DetectLabels permission):', e.message);
+  }
+
   const image = new Image({ url: uploadRes.url, s3Key, userId, tags: generalTags });
   await image.save();
 
