@@ -255,7 +255,6 @@ const searchImages = async (userId, queryText, topK = 10) => {
         caption: 1,
         tags: 1,
         s3Key: 1,
-        embedding: 0,            // don't send the 768-float array to client
         score: { $meta: 'vectorSearchScore' },
       },
     },
