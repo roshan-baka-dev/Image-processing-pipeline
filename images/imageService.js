@@ -199,7 +199,8 @@ const listImages = async (userId, page, limit) => {
 
 // NEW: background AI enrichment
 async function enrichImageWithAI(imageId, imageBuffer, existingTags, mimeType = 'image/jpeg') {
-  const caption = await generateCaption(imageBuffer, mimeType);
+  // Pass existingTags as fallback so caption never fails even if HF vision API is down
+  const caption = await generateCaption(imageBuffer, mimeType, existingTags);
   const textToEmbed = `${caption} ${existingTags.join(' ')}`;
   const embedding = await generateEmbedding(textToEmbed);
   await Image.findByIdAndUpdate(imageId, {
@@ -207,7 +208,7 @@ async function enrichImageWithAI(imageId, imageBuffer, existingTags, mimeType = 
     embedding,
     aiProcessed: true,
   });
-  console.log(`✅ AI enrichment done for image ${imageId}`);
+  console.log(`✅ AI enrichment done for image ${imageId}: "${caption.slice(0, 60)}..."`);
 }
 
 // Semantic search using MongoDB Atlas $vectorSearch
