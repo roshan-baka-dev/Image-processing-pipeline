@@ -1,6 +1,6 @@
 const sharp = require('sharp');
 const crypto = require('crypto');
-const { isImageSafeFromS3 } = require('../utils/rekognition');
+const { isImageSafeFromS3, detectGeneralLabelsS3 } = require('../utils/rekognition');
 const {
   uploadToS3,
   uploadBufferToS3,
@@ -55,14 +55,15 @@ const uploadImage = async (file, userId) => {
     err.isBlocked = true;
     throw err;
   }
-  // Extract Rekognition tag names (already available!)
-  const rekognitionTags = labels.map((l) => l.Name);
-  const image = new Image({ url: uploadRes.url, s3Key, userId, tags: rekognitionTags });
+  // ✅ Moderation labels are empty for safe images — call DetectLabels separately
+  // to get actual object/scene labels (Dog, Outdoor, Park, etc.) for captioning.
+  const generalTags = await detectGeneralLabelsS3(bucket, s3Key);
+  const image = new Image({ url: uploadRes.url, s3Key, userId, tags: generalTags });
   await image.save();
 
   // ✨ Fire-and-forget AI enrichment (non-blocking)
   if (imageBuffer) {
-    enrichImageWithAI(image._id, imageBuffer, rekognitionTags, file.mimetype).catch((err) =>
+    enrichImageWithAI(image._id, imageBuffer, generalTags, file.mimetype).catch((err) =>
       console.error('AI enrichment failed:', err.message)
     );
   }

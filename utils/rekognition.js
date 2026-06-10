@@ -1,6 +1,7 @@
 const {
   RekognitionClient,
   DetectModerationLabelsCommand,
+  DetectLabelsCommand,
 } = require('@aws-sdk/client-rekognition');
 
 const rekClient = new RekognitionClient({ region: process.env.AWS_REGION });
@@ -13,6 +14,20 @@ async function detectModerationLabelsS3(bucket, key) {
   });
   const res = await rekClient.send(cmd);
   return res?.ModerationLabels || [];
+}
+
+// Detects general objects, scenes, and concepts in the image.
+// Returns label name strings e.g. ["Dog", "Outdoor", "Park", "Running", "Grass"]
+// Used for building captions for vector search — completely separate from
+// moderation labels which are only non-empty for unsafe content.
+async function detectGeneralLabelsS3(bucket, key, maxLabels = 15) {
+  const cmd = new DetectLabelsCommand({
+    Image: { S3Object: { Bucket: bucket, Name: key } },
+    MaxLabels: maxLabels,
+    MinConfidence: 70,
+  });
+  const res = await rekClient.send(cmd);
+  return (res?.Labels || []).map((l) => l.Name);
 }
 
 function isLabelBlocked(label, blockedList = []) {
@@ -36,4 +51,5 @@ async function isImageSafeFromS3(bucket, key, { blockedCategories } = {}) {
   return { safe: blocked.length === 0, labels, blocked };
 }
 
-module.exports = { isImageSafeFromS3, detectModerationLabelsS3 };
+module.exports = { isImageSafeFromS3, detectModerationLabelsS3, detectGeneralLabelsS3 };
+
