@@ -37,7 +37,7 @@ async function withRetry(fn, maxAttempts = 3) {
 }
 
 // ─── Job 1: Image Captioning ──────────────────────────────────────────────────
-// Primary:  Salesforce/blip-image-captioning-base  (has HF inference provider)
+// Primary:  nlpconnect/vit-gpt2-image-captioning (Highly available on free tier)
 // Fallback: build a descriptive caption from Rekognition labels
 async function generateCaption(imageBuffer, mimeType = 'image/jpeg', fallbackLabels = []) {
     try {
@@ -45,8 +45,9 @@ async function generateCaption(imageBuffer, mimeType = 'image/jpeg', fallbackLab
 
         const result = await withRetry(() =>
             hf.imageToText({
-                model: 'Salesforce/blip-image-captioning-base',
+                model: 'nlpconnect/vit-gpt2-image-captioning',
                 data: blob,
+                provider: 'hf-inference'
             })
         );
 
@@ -77,6 +78,7 @@ async function generateEmbedding(text) {
         hf.featureExtraction({
             model: 'sentence-transformers/all-mpnet-base-v2',
             inputs: text,
+            provider: 'hf-inference'
         })
     );
 
