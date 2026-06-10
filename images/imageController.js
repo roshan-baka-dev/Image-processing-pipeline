@@ -150,6 +150,7 @@ const searchImagesController = async (req, res) => {
     const results = await searchImages(userId, query);
     res.status(200).json({ results, message: 'Search completed' });
   } catch (error) {
+    console.error('🔥 Search endpoint failed:', error);
     res.status(500).json({ message: 'Search failed', error: error.message });
   }
 };
